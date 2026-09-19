@@ -27,7 +27,7 @@ namespace {
 using namespace omarchy::sony;
 using namespace omarchy::sony::protocol;
 
-constexpr const char* DAEMON_VERSION = "0.2.0";
+constexpr const char* DAEMON_VERSION = "0.3.0";
 
 struct DaemonOptions {
     bool showHelp{false};
@@ -40,7 +40,7 @@ struct DaemonOptions {
 
 void printHelp(const char* progName) {
     std::cout << "Usage: " << progName << " [OPTIONS]\n\n"
-              << "Headless background daemon managing Sony WH-1000XM3 headphones on Linux.\n\n"
+              << "Headless background daemon managing Sony ULT WEAR headphones on Linux.\n\n"
               << "Options:\n"
               << "  -h, --help               Display this help message and exit\n"
               << "  -v, --version            Display version information and exit\n"
@@ -180,10 +180,10 @@ int main(int argc, char* argv[]) {
 
     // In mock mode, ensure initial standard state
     if (opts.mockMode) {
-        stateEngine.setConnected(true, "WH-1000XM3");
+        stateEngine.setConnected(true, "ULT WEAR");
         stateEngine.setBattery(85, false);
         stateEngine.updateNoiseMode("anc", 0, false);
-        stateEngine.updateEqPreset("off");
+        stateEngine.updateUltMode(0);
         stateEngine.updateDsee(true);
         stateEngine.save();
     }
@@ -261,7 +261,7 @@ int main(int argc, char* argv[]) {
     callbacks.onConnected = [&]() {
         txSeq = 0;
         const auto& dev = btManager->getCurrentDevice();
-        std::string name = dev.name.empty() ? "WH-1000XM3" : dev.name;
+        std::string name = dev.name.empty() ? "ULT WEAR" : dev.name;
         stateEngine.setConnected(true, name);
         if (dev.batteryLevel >= 0) {
             stateEngine.setBattery(dev.batteryLevel, false);
@@ -275,14 +275,11 @@ int main(int argc, char* argv[]) {
         txPending = false;
 
         if (!opts.mockMode) {
-            // CONNECT_GET_PROTOCOL_INFO must open the session: the XM3 silently
-            // drops every other command until it has been handshaken. The rest
-            // follow one at a time as each acknowledgement comes back.
+            // Open the Sony MDR v2 session, then query the ULT WEAR state.
             enqueueTx([&]() { return serializeHandshake(nextSeq()); });
-            enqueueTx([&]() { return serializeQueryDeviceName(nextSeq()); });
             enqueueTx([&]() { return serializeQueryBattery(nextSeq()); });
             enqueueTx([&]() { return serializeQueryNoiseMode(nextSeq()); });
-            enqueueTx([&]() { return serializeQueryEq(nextSeq()); });
+            enqueueTx([&]() { return serializeQueryUltMode(nextSeq()); });
             enqueueTx([&]() { return serializeQueryDsee(nextSeq()); });
         }
     };
@@ -349,12 +346,8 @@ int main(int argc, char* argv[]) {
         return stateEngine.getStatusJson();
     };
     ipcCb.setNoiseMode = [&](NoiseMode mode, uint8_t ambientLevel, std::string& /*err*/) {
-        uint8_t finalLevel = ambientLevel;
-        if (mode == NoiseMode::AMBIENT && finalLevel == 0) {
-            int curLevel = stateEngine.getState().ambient_sound_level;
-            finalLevel = curLevel > 0 ? static_cast<uint8_t>(curLevel) : 20;
-        }
-        stateEngine.updateNoiseMode(noiseModeToString(mode), finalLevel, stateEngine.getState().voice_passthrough);
+        const uint8_t finalLevel = 0;
+        stateEngine.updateNoiseMode(noiseModeToString(mode), 0, stateEngine.getState().voice_passthrough);
         stateEngine.save();
         if (btManager && btManager->getState() == ConnectionState::CONNECTED) {
             bool voice = stateEngine.getState().voice_passthrough;
@@ -367,6 +360,28 @@ int main(int argc, char* argv[]) {
         } else {
             fprintf(stderr, "[DAEMON] Warning: BT not connected, packet queued/skipped\n");
             fflush(stderr);
+        }
+        return true;
+    };
+    ipcCb.setVoiceFocus = [&](bool enabled, std::string& /*err*/) {
+        stateEngine.updateNoiseMode("ambient", 0, enabled);
+        stateEngine.save();
+        if (btManager && btManager->getState() == ConnectionState::CONNECTED) {
+            fprintf(stderr, "[DAEMON] Queueing Voice Focus: %s\n", enabled ? "on" : "off");
+            fflush(stderr);
+            enqueueTx([&, enabled]() {
+                return serializeNoiseMode(NoiseMode::AMBIENT, 0, enabled, nextSeq());
+            });
+        }
+        return true;
+    };
+    ipcCb.setUltMode = [&](UltMode mode, std::string& /*err*/) {
+        stateEngine.updateUltMode(static_cast<int>(mode));
+        stateEngine.save();
+        if (btManager && btManager->getState() == ConnectionState::CONNECTED) {
+            fprintf(stderr, "[DAEMON] Queueing ULT mode: %u\n", static_cast<unsigned>(mode));
+            fflush(stderr);
+            enqueueTx([&, mode]() { return serializeUltMode(mode, nextSeq()); });
         }
         return true;
     };

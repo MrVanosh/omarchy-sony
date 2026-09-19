@@ -51,7 +51,7 @@ bool is_negative_number(const std::string& str) {
 
 void print_usage(std::ostream& os) {
     os << "Usage: sony-ctl [-s <socket>] <subcommand> [args...]\n"
-       << "Subcommands: status, noise, ambient-level, eq, dsee\n\n"
+       << "Subcommands: status, noise, voice-focus, ult, dsee\n\n"
        << "Options:\n"
        << "  -s, --socket <path>  Override socket path\n"
        << "  -h, --help           Show help\n"
@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (show_version) {
-        std::cout << "sony-ctl 0.2.0\n";
+        std::cout << "sony-ctl 0.3.0\n";
         return 0;
     }
 
@@ -245,6 +245,33 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return send_command(socket_path, "noise " + mode + "\n", false);
+    }
+
+    if (subcmd == "voice-focus") {
+        if (remaining.size() < 2) {
+            std::cerr << "Error: 'voice-focus' requires 'on' or 'off'\n";
+            return 1;
+        }
+        std::string val = to_lower(remaining[1]);
+        if (val != "on" && val != "off") {
+            std::cerr << "Error: 'voice-focus' requires 'on' or 'off'\n";
+            return 1;
+        }
+        return send_command(socket_path, "voice-focus " + val + "\n", false);
+    }
+
+    if (subcmd == "ult") {
+        if (remaining.size() < 2) {
+            std::cerr << "Error: 'ult' requires off, 1, or 2\n";
+            return 1;
+        }
+        std::string val = to_lower(remaining[1]);
+        if (val != "off" && val != "0" && val != "1" && val != "2" &&
+            val != "ult1" && val != "ult2") {
+            std::cerr << "Error: 'ult' requires off, 1, or 2\n";
+            return 1;
+        }
+        return send_command(socket_path, "ult " + val + "\n", false);
     }
 
     if (subcmd == "ambient-level") {

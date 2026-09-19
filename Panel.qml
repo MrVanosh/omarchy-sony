@@ -1,5 +1,5 @@
 // plugin/Panel.qml
-// Omarchy Bar-Widget & Interactive Dropdown Control Panel for Sony WH-1000XM3.
+// Omarchy Bar-Widget & Interactive Dropdown Control Panel for Sony ULT WEAR.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -23,7 +23,7 @@ Panel {
   // Keyboard navigation state
   property string focusSection: "noise"
   property int noiseIndex: 0
-  property int eqIndex: 0
+  property int ultIndex: 0
   property bool cursorActive: false
 
   readonly property var noiseModes: [Model.NOISE_ANC, Model.NOISE_AMBIENT, Model.NOISE_OFF]
@@ -42,8 +42,7 @@ Panel {
       focusSection = "noise"
       var idx = noiseModes.indexOf(sony.noiseMode)
       noiseIndex = idx !== -1 ? idx : 0
-      var eqIdx = Model.EQ_PRESETS.indexOf(sony.eqPreset)
-      eqIndex = eqIdx !== -1 ? eqIdx : 0
+      ultIndex = sony.ultMode
       if (panelFlick) panelFlick.contentY = 0
       sony.refresh()
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -52,29 +51,21 @@ Panel {
 
   function moveCursor(dx, dy) {
     cursorActive = true
-    var sections = ["noise", "ambient", "eq", "dsee"]
+    var sections = ["noise", "voice", "ult", "dsee"]
 
     if (dy !== 0) {
       if (focusSection === "noise") {
         if (dy > 0) {
-          focusSection = (sony.noiseMode === Model.NOISE_AMBIENT) ? "ambient" : "eq"
+          focusSection = "voice"
         }
-      } else if (focusSection === "ambient") {
-        if (dy > 0) focusSection = "eq"
+      } else if (focusSection === "voice") {
+        if (dy > 0) focusSection = "ult"
         else if (dy < 0) focusSection = "noise"
-      } else if (focusSection === "eq") {
-        if (dy > 0) {
-          if (eqIndex < 5) eqIndex = Math.min(9, eqIndex + 5)
-          else focusSection = "dsee"
-        } else if (dy < 0) {
-          if (eqIndex >= 5) eqIndex = eqIndex - 5
-          else focusSection = (sony.noiseMode === Model.NOISE_AMBIENT) ? "ambient" : "noise"
-        }
+      } else if (focusSection === "ult") {
+        if (dy > 0) focusSection = "dsee"
+        else if (dy < 0) focusSection = "voice"
       } else if (focusSection === "dsee") {
-        if (dy < 0) {
-          focusSection = "eq"
-          eqIndex = 5
-        }
+        if (dy < 0) focusSection = "ult"
       }
       return
     }
@@ -82,11 +73,8 @@ Panel {
     if (dx !== 0) {
       if (focusSection === "noise") {
         noiseIndex = Math.max(0, Math.min(noiseModes.length - 1, noiseIndex + dx))
-      } else if (focusSection === "ambient") {
-        var newLvl = Model.clamp(sony.ambientSoundLevel + dx, 0, 20, 0)
-        sony.setAmbientLevel(newLvl)
-      } else if (focusSection === "eq") {
-        eqIndex = Math.max(0, Math.min(Model.EQ_PRESETS.length - 1, eqIndex + dx))
+      } else if (focusSection === "ult") {
+        ultIndex = Math.max(Model.ULT_OFF, Math.min(Model.ULT_2, ultIndex + dx))
       }
     }
   }
@@ -94,10 +82,10 @@ Panel {
   function activateCursor() {
     if (focusSection === "noise") {
       sony.setNoiseMode(noiseModes[noiseIndex])
-    } else if (focusSection === "ambient") {
-      // Level is adjusted via left/right
-    } else if (focusSection === "eq") {
-      sony.setEqPreset(Model.EQ_PRESETS[eqIndex])
+    } else if (focusSection === "voice") {
+      sony.setVoiceFocus(!sony.voicePassthrough)
+    } else if (focusSection === "ult") {
+      sony.setUltMode(ultIndex)
     } else if (focusSection === "dsee") {
       sony.setDsee(!sony.dseeExtreme)
     }
@@ -123,8 +111,8 @@ Panel {
     hasVisualContent: true
     fixedWidth: vertical ? -1 : (contentRow.implicitWidth + scaledHorizontalMargin * 2)
     tooltipText: sony.connected
-      ? ((sony.deviceName || "WH-1000XM3") + " (" + Model.noiseModeName(sony.noiseMode) + ", " + Model.formatBattery(sony.batteryLevel) + ")")
-      : "Sony WH-1000XM3 (Disconnected)"
+      ? ((sony.deviceName || "ULT WEAR") + " (" + Model.noiseModeName(sony.noiseMode) + ", " + Model.formatBattery(sony.batteryLevel) + ")")
+      : "Sony ULT WEAR (Disconnected)"
 
     Row {
       id: contentRow
@@ -227,7 +215,7 @@ Panel {
 
               Text {
                 textFormat: Text.PlainText
-                text: sony.connected ? (sony.deviceName || "WH-1000XM3") : "WH-1000XM3"
+                text: sony.connected ? (sony.deviceName || "ULT WEAR") : "ULT WEAR"
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.title
@@ -358,53 +346,31 @@ Panel {
           }
 
           // -------------------------------------------------------------------
-          // 3. Ambient Sound Level Slider
+          // 3. Ambient Voice Focus
           // -------------------------------------------------------------------
           Column {
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(8)
             opacity: sony.noiseMode === Model.NOISE_AMBIENT ? 1.0 : 0.4
 
-            Row {
-              width: parent.width
-
-              PanelSectionHeader {
-                text: "AMBIENT SOUND LEVEL"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Item {
-                width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth)
-                height: 1
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                text: String(sony.ambientSoundLevel) + " / 20"
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
+            PanelSectionHeader {
+              text: "AMBIENT SOUND"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
-            PanelSlider {
-              id: ambientSlider
+            Toggle {
               width: parent.width
-              minimum: 0
-              maximum: 20
-              step: 1
-              integer: true
-              value: sony.ambientSoundLevel
+              label: "Focus on Voice"
+              description: "Emphasize voices while Ambient Sound is active"
+              checked: sony.voicePassthrough
               enabled: sony.noiseMode === Model.NOISE_AMBIENT
-              bar: root.bar
-              onMoved: function(v) {
-                root.focusSection = "ambient"
-                sony.setAmbientLevel(Math.round(v))
-              }
-              onReleased: function(v) {
-                sony.setAmbientLevel(Math.round(v))
+              hasCursor: root.cursorActive && root.focusSection === "voice"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: {
+                root.focusSection = "voice"
+                sony.setVoiceFocus(!sony.voicePassthrough)
               }
             }
           }
@@ -414,46 +380,47 @@ Panel {
           }
 
           // -------------------------------------------------------------------
-          // 4. Equalizer Presets Selector
+          // 4. ULT Bass Selector
           // -------------------------------------------------------------------
           Column {
             width: parent.width
             spacing: Style.space(8)
 
             PanelSectionHeader {
-              text: "EQUALIZER PRESET (" + Model.eqPresetName(sony.eqPreset) + ")"
+              text: "ULT POWER SOUND (" + Model.ultModeName(sony.ultMode) + ")"
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
 
-            Grid {
-              id: eqGrid
+            Row {
+              id: ultModeRow
               width: parent.width
-              columns: 5
               spacing: Style.space(6)
 
-              readonly property real cellWidth: (width - spacing * (columns - 1)) / columns
+              readonly property real cellWidth: (width - spacing * 2) / 3
 
               Repeater {
-                model: Model.EQ_PRESETS
+                model: [
+                  { mode: Model.ULT_OFF, label: "Off" },
+                  { mode: Model.ULT_1, label: "ULT 1" },
+                  { mode: Model.ULT_2, label: "ULT 2" }
+                ]
 
                 Button {
                   required property var modelData
                   required property int index
-                  width: eqGrid.cellWidth
-                  text: Model.eqPresetButtonLabel(modelData)
-                  fontSize: Style.font.caption
+                  width: ultModeRow.cellWidth
+                  text: modelData.label
+                  fontSize: Style.font.bodySmall
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   bordered: true
-                  selected: sony.eqPreset === modelData
-                  hasCursor: root.cursorActive && root.focusSection === "eq" && root.eqIndex === index
-                  horizontalPadding: Style.space(4)
-                  verticalPadding: Style.space(6)
+                  selected: sony.ultMode === modelData.mode
+                  hasCursor: root.cursorActive && root.focusSection === "ult" && root.ultIndex === index
                   onClicked: {
-                    root.focusSection = "eq"
-                    root.eqIndex = index
-                    sony.setEqPreset(modelData)
+                    root.focusSection = "ult"
+                    root.ultIndex = index
+                    sony.setUltMode(modelData.mode)
                   }
                 }
               }
@@ -480,7 +447,7 @@ Panel {
             Toggle {
               id: toggleDsee
               width: parent.width
-              label: "DSEE HX"
+              label: "DSEE"
               description: "Upscales compressed tracks toward hi-res quality"
               checked: sony.dseeExtreme
               hasCursor: root.cursorActive && root.focusSection === "dsee"

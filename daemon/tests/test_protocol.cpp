@@ -211,50 +211,50 @@ void testCommandSerializers() {
     TEST_CASE("CommandSerializers");
 
     // Noise Mode: ANC
-    // v1 NC/ASM: 68 02 <effect> 02 <ncDualSingle> 01 <asmId> <asmLevel>
+    // ULT WEAR AmbientSoundControl2: 68 17 01 <enabled> <ambient> 02 <voice> 00
     auto ancFrame = serializeNoiseMode(NoiseMode::ANC, 0, false, 0);
     auto unpAnc = unpackFrame(ancFrame);
     TEST_ASSERT(unpAnc.has_value(), "ANC frame must be valid");
     TEST_ASSERT_EQ(unpAnc->payload[0], 0x68, "Opcode must be NCASM_SET_PARAM (0x68)");
-    TEST_ASSERT_EQ(unpAnc->payload[1], 0x02, "Type must be MODE_NC_ASM (0x02)");
-    TEST_ASSERT_EQ(unpAnc->payload[2], 0x11, "Effect must be ADJUSTMENT_COMPLETION (0x11)");
-    TEST_ASSERT_EQ(unpAnc->payload[4], 0x02, "ncDualSingle must be DUAL (0x02) for ANC");
+    TEST_ASSERT_EQ(unpAnc->payload[1], 0x17, "Type must be AmbientSoundControl2 (0x17)");
+    TEST_ASSERT_EQ(unpAnc->payload[3], 0x01, "ANC must enable noise control");
+    TEST_ASSERT_EQ(unpAnc->payload[4], 0x00, "ANC must disable ambient mode");
     TEST_ASSERT_EQ(unpAnc->payload[7], 0x00, "ANC carries ambient level 0");
 
     // Noise Mode: Ambient Level 15 with voice focus
     auto ambFrame = serializeAmbientLevel(15, true, 1);
     auto unpAmb = unpackFrame(ambFrame);
     TEST_ASSERT(unpAmb.has_value(), "Ambient frame must be valid");
-    TEST_ASSERT_EQ(unpAmb->payload[2], 0x11, "Effect must be ADJUSTMENT_COMPLETION (0x11)");
-    TEST_ASSERT_EQ(unpAmb->payload[4], 0x00, "ncDualSingle must be OFF (0x00) for ambient");
-    TEST_ASSERT_EQ(unpAmb->payload[6], 0x01, "asmId must be VOICE (0x01)");
-    TEST_ASSERT_EQ(unpAmb->payload[7], 15, "ambient level must be 15");
+    TEST_ASSERT_EQ(unpAmb->payload[3], 0x01, "Ambient must enable noise control");
+    TEST_ASSERT_EQ(unpAmb->payload[4], 0x01, "Ambient mode byte must be ON");
+    TEST_ASSERT_EQ(unpAmb->payload[6], 0x01, "Voice Focus must be ON");
+    TEST_ASSERT_EQ(unpAmb->payload[7], 0x00, "ULT WEAR ignores graduated ambient levels");
 
-    // Noise Mode: Level clamping (> 20 clamped to 20)
+    // ULT WEAR ignores the level field.
     auto clampedAmb = serializeAmbientLevel(50, false, 0);
     auto unpClampedAmb = unpackFrame(clampedAmb);
     TEST_ASSERT(unpClampedAmb.has_value(), "Clamped ambient frame valid");
-    TEST_ASSERT_EQ(unpClampedAmb->payload[7], 20, "Ambient level must clamp to 20");
+    TEST_ASSERT_EQ(unpClampedAmb->payload[7], 0, "Ambient level must stay zero");
 
-    // Ambient level 0 stays ambient: the XM3 has no wind-noise mode
+    // Ambient remains binary at level 0.
     auto zeroAmb = serializeAmbientLevel(0, false, 0);
     auto unpZeroAmb = unpackFrame(zeroAmb);
     TEST_ASSERT(unpZeroAmb.has_value(), "Zero-level ambient frame must be valid");
-    TEST_ASSERT_EQ(unpZeroAmb->payload[4], 0x00, "ncDualSingle must stay OFF (ambient)");
+    TEST_ASSERT_EQ(unpZeroAmb->payload[4], 0x01, "Ambient mode must stay enabled");
     TEST_ASSERT_EQ(unpZeroAmb->payload[7], 0x00, "ambient level must be 0");
 
     // Noise Mode: Off
     auto offFrame = serializeNoiseMode(NoiseMode::OFF, 0, false, 0);
     auto unpOff = unpackFrame(offFrame);
     TEST_ASSERT(unpOff.has_value(), "Off frame must be valid");
-    TEST_ASSERT_EQ(unpOff->payload[2], 0x00, "Effect must be OFF (0x00)");
+    TEST_ASSERT_EQ(unpOff->payload[3], 0x00, "Noise control must be OFF");
 
     // EQ Preset: Vocal
     auto eqVocal = serializeEqPreset(EqPreset::VOCAL, 0);
     auto unpVocal = unpackFrame(eqVocal);
     TEST_ASSERT(unpVocal.has_value(), "EQ Preset frame must be valid");
     TEST_ASSERT_EQ(unpVocal->payload[0], 0x58, "Opcode must be EQEBB_SET_PARAM (0x58)");
-    TEST_ASSERT_EQ(unpVocal->payload[1], 0x01, "EQEBB inquired type must be 0x01 on the XM3");
+    TEST_ASSERT_EQ(unpVocal->payload[1], 0x00, "Legacy preset EQ inquired type must be 0x00");
     TEST_ASSERT_EQ(unpVocal->payload[2], static_cast<uint8_t>(EqPreset::VOCAL), "Preset must match Vocal (0x14)");
 
     // Custom EQ: [-10, 0, 10, -5, 5] and clear bass 3
@@ -286,12 +286,18 @@ void testCommandSerializers() {
     TEST_ASSERT(unpDsee.has_value(), "DSEE frame valid");
     TEST_ASSERT_EQ(unpDsee->payload[0], 0xE8, "Opcode must be AUDIO_SET_PARAM (0xE8)");
     TEST_ASSERT_EQ(unpDsee->payload[1], 0x01, "Type must be UPSCALING (0x01)");
-    TEST_ASSERT_EQ(unpDsee->payload[3], 0x01, "DSEE HX ON is wire byte 0x01");
+    TEST_ASSERT_EQ(unpDsee->payload[2], 0x01, "DSEE ON is wire byte 0x01");
 
     auto dseeOff = serializeDsee(false, 0);
     auto unpDseeOff = unpackFrame(dseeOff);
     TEST_ASSERT(unpDseeOff.has_value(), "DSEE off frame valid");
-    TEST_ASSERT_EQ(unpDseeOff->payload[3], 0x00, "DSEE HX OFF is wire byte 0x00");
+    TEST_ASSERT_EQ(unpDseeOff->payload[2], 0x00, "DSEE OFF is wire byte 0x00");
+
+    auto ult2 = unpackFrame(serializeUltMode(UltMode::ULT2, 1));
+    TEST_ASSERT(ult2.has_value(), "ULT mode frame valid");
+    TEST_ASSERT_EQ(ult2->payload[0], 0x58, "ULT uses EQEBB_SET_PARAM");
+    TEST_ASSERT_EQ(ult2->payload[1], 0x03, "ULT inquired type is 0x03");
+    TEST_ASSERT_EQ(ult2->payload[3], 0x02, "ULT 2 mode byte");
 
     // ACK Packet
     auto ackFrame = serializeACK(1);
@@ -327,7 +333,7 @@ void testQuerySerializers() {
     auto qBat = serializeQueryBattery(0);
     auto unpBat = unpackFrame(qBat);
     TEST_ASSERT(unpBat.has_value(), "Battery query valid");
-    TEST_ASSERT_EQ(unpBat->payload[0], 0x10, "POWER_GET_STATUS opcode (v1)");
+    TEST_ASSERT_EQ(unpBat->payload[0], 0x22, "POWER_GET_STATUS opcode (v2)");
     TEST_ASSERT_EQ(unpBat->payload[1], 0x00, "BATTERY type");
 
     // Query Noise Mode
@@ -335,14 +341,19 @@ void testQuerySerializers() {
     auto unpNc = unpackFrame(qNc);
     TEST_ASSERT(unpNc.has_value(), "Noise query valid");
     TEST_ASSERT_EQ(unpNc->payload[0], 0x66, "NCASM_GET_PARAM opcode");
-    TEST_ASSERT_EQ(unpNc->payload[1], 0x02, "MODE_NC_ASM type (v1)");
+    TEST_ASSERT_EQ(unpNc->payload[1], 0x17, "AmbientSoundControl2 type");
 
     // Query EQ
     auto qEq = serializeQueryEq(0);
     auto unpEq = unpackFrame(qEq);
     TEST_ASSERT(unpEq.has_value(), "EQ query valid");
     TEST_ASSERT_EQ(unpEq->payload[0], 0x56, "EQEBB_GET_PARAM opcode");
-    TEST_ASSERT_EQ(unpEq->payload[1], 0x01, "EQEBB inquired type 0x01");
+    TEST_ASSERT_EQ(unpEq->payload[1], 0x00, "Preset EQ inquired type 0x00");
+
+    auto qUlt = unpackFrame(serializeQueryUltMode(0));
+    TEST_ASSERT(qUlt.has_value(), "ULT query valid");
+    TEST_ASSERT_EQ(qUlt->payload[0], 0x56, "ULT uses EQEBB_GET_PARAM");
+    TEST_ASSERT_EQ(qUlt->payload[1], 0x03, "ULT query inquired type 0x03");
 
     // Query DSEE
     auto qDsee = serializeQueryDsee(0);
@@ -362,64 +373,48 @@ void testInboundStateParser() {
 
     HeadphoneState state;
 
-    // 1. Battery status notification: 85% charging (v1 POWER_NTFY_STATUS)
-    std::vector<uint8_t> batteryPayload = {0x13, 0x00, 85, 0x01};
+    // 1. Battery status notification: 85% charging (v2 POWER_NTFY_STATUS)
+    std::vector<uint8_t> batteryPayload = {0x25, 0x00, 85, 0x01};
     TEST_ASSERT(parseInboundPayload(batteryPayload, state), "Battery payload must be parsed");
     TEST_ASSERT_EQ(state.battery_level, 85, "Battery level must be 85");
     TEST_ASSERT(state.battery_charging, "Battery charging must be true");
     TEST_ASSERT(state.connected, "State must mark connected true");
 
-    // 2. Model name (verbatim WH-1000XM3 capture): 05 01 0a "WH-1000XM3"
-    std::vector<uint8_t> namePayload = {0x05, 0x01, 0x0A, 'W','H','-','1','0','0','0','X','M','3'};
+    // 2. Model name
+    std::vector<uint8_t> namePayload = {0x05, 0x01, 0x08, 'U','L','T',' ','W','E','A','R'};
     TEST_ASSERT(parseInboundPayload(namePayload, state), "Model name payload must be parsed");
-    TEST_ASSERT_EQ(state.device_name, std::string("WH-1000XM3"), "Device name must be WH-1000XM3");
+    TEST_ASSERT_EQ(state.device_name, std::string("ULT WEAR"), "Device name must be ULT WEAR");
 
-    // 3. Real capture: everything off -> 67 02 00 02 02 01 00 14
-    std::vector<uint8_t> ncPayload = {0x67, 0x02, 0x00, 0x02, 0x02, 0x01, 0x00, 0x14};
+    // 3. ULT WEAR: everything off
+    std::vector<uint8_t> ncPayload = {0x67, 0x17, 0x01, 0x00, 0x00, 0x01, 0x00};
     TEST_ASSERT(parseInboundPayload(ncPayload, state), "NC payload must be parsed");
     TEST_ASSERT_EQ(state.noise_mode, std::string("off"), "Noise mode must be off");
 
-    // 4. Real capture: ANC dual -> 67 02 01 02 02 01 00 00
-    std::vector<uint8_t> ancPayload = {0x69, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00, 0x00};
+    // 4. ULT WEAR ANC
+    std::vector<uint8_t> ancPayload = {0x69, 0x17, 0x01, 0x01, 0x00, 0x01, 0x00};
     TEST_ASSERT(parseInboundPayload(ancPayload, state), "ANC payload must be parsed");
     TEST_ASSERT_EQ(state.noise_mode, std::string("anc"), "Noise mode must be anc");
 
-    // 5. Real capture: ambient, focus on voice, level 15 -> 67 02 01 02 00 01 01 0f
-    std::vector<uint8_t> ambPayload = {0x69, 0x02, 0x01, 0x02, 0x00, 0x01, 0x01, 15};
+    // 5. ULT WEAR ambient with Focus on Voice
+    std::vector<uint8_t> ambPayload = {0x69, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01};
     TEST_ASSERT(parseInboundPayload(ambPayload, state), "Ambient payload must be parsed");
     TEST_ASSERT_EQ(state.noise_mode, std::string("ambient"), "Noise mode must be ambient");
-    TEST_ASSERT_EQ(state.ambient_sound_level, 15, "Ambient level must be 15");
+    TEST_ASSERT_EQ(state.ambient_sound_level, 0, "ULT WEAR has no ambient level");
     TEST_ASSERT(state.voice_passthrough, "Voice passthrough must be true");
 
-    // 6. Equalizer custom with 5 bands & Clear Bass (inquired type 0x01)
-    // Clear bass: 0x14 (20 - 10 = +10); bands 0x0B (1), 0x0A (0), 0x0D (3), 0x09 (-1), 0x0C (2)
-    std::vector<uint8_t> eqPayload = {0x57, 0x01, 0xA0, 0x06, 0x14, 0x0B, 0x0A, 0x0D, 0x09, 0x0C};
-    TEST_ASSERT(parseInboundPayload(eqPayload, state), "EQ payload must be parsed");
-    TEST_ASSERT_EQ(state.eq_preset, std::string("custom"), "Preset must be custom");
-    TEST_ASSERT_EQ(state.clear_bass, 10, "Clear bass must be 10");
-    TEST_ASSERT_EQ(state.eq_custom_bands[0], 1, "Band 0 must be 1");
-    TEST_ASSERT_EQ(state.eq_custom_bands[1], 0, "Band 1 must be 0");
-    TEST_ASSERT_EQ(state.eq_custom_bands[2], 3, "Band 2 must be 3");
-    TEST_ASSERT_EQ(state.eq_custom_bands[3], -1, "Band 3 must be -1");
-    TEST_ASSERT_EQ(state.eq_custom_bands[4], 2, "Band 4 must be 2");
+    // 6. ULT 2 status
+    std::vector<uint8_t> ultPayload = {0x57, 0x03, 0x00, 0x02, 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A};
+    TEST_ASSERT(parseInboundPayload(ultPayload, state), "ULT payload must be parsed");
+    TEST_ASSERT_EQ(state.ult_mode, 2, "ULT mode must be 2");
 
-    // 7. Real capture: DSEE HX on -> e7 01 00 01 (value lives in payload[3])
-    std::vector<uint8_t> dseePayload = {0xE7, 0x01, 0x00, 0x01};
+    // 7. DSEE on -> e7 01 01
+    std::vector<uint8_t> dseePayload = {0xE7, 0x01, 0x01};
     TEST_ASSERT(parseInboundPayload(dseePayload, state), "DSEE payload must be parsed");
     TEST_ASSERT(state.dsee_extreme, "DSEE must be true");
 
-    std::vector<uint8_t> dseeOffPayload = {0xE9, 0x01, 0x00, 0x00};
+    std::vector<uint8_t> dseeOffPayload = {0xE9, 0x01, 0x00};
     TEST_ASSERT(parseInboundPayload(dseeOffPayload, state), "DSEE off payload must be parsed");
     TEST_ASSERT(!state.dsee_extreme, "DSEE must be false");
-
-    // 8. XM4/XM5-only payloads must be ignored rather than misparsed
-    HeadphoneState untouched = state;
-    std::vector<uint8_t> v2Battery = {0x23, 0x00, 42, 0x01};
-    TEST_ASSERT(!parseInboundPayload(v2Battery, state), "v2 battery payload must be ignored");
-    TEST_ASSERT_EQ(state.battery_level, untouched.battery_level, "v2 battery must not change state");
-    std::vector<uint8_t> v2Nc = {0x67, 0x17, 0x01, 0x01, 0x00, 0x00, 0x00};
-    TEST_ASSERT(!parseInboundPayload(v2Nc, state), "v2 NC/ASM payload must be ignored");
-    TEST_ASSERT_EQ(state.noise_mode, untouched.noise_mode, "v2 NC/ASM must not change state");
 
     // Alternative compact packet format (0x10, 0x11, 0x12, 0x13, 0x14)
     std::vector<uint8_t> compactBat = {0x10, 92, 0x00};
@@ -435,7 +430,7 @@ void testInboundStateParser() {
     TEST_ASSERT(json.find("\"noise_mode\":\"ambient\"") != std::string::npos, "JSON must contain noise_mode");
     TEST_ASSERT(json.find("speak_to_chat") == std::string::npos, "JSON must not advertise XM5-only speak_to_chat");
     TEST_ASSERT(json.find("multipoint") == std::string::npos, "JSON must not advertise XM5-only multipoint");
-    TEST_ASSERT(json.find("\"eq_preset\":\"custom\"") != std::string::npos, "JSON must contain eq_preset");
+    TEST_ASSERT(json.find("\"ult_mode\":2") != std::string::npos, "JSON must contain ULT mode");
 
     // Verify disconnected JSON
     HeadphoneState disc = HeadphoneState::makeDisconnected();
@@ -588,7 +583,8 @@ void testStateEngine() {
         std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
         TEST_ASSERT(content.find("\"schema_version\": 1") != std::string::npos, "Schema version must be 1");
         TEST_ASSERT(content.find("\"connected\": true") != std::string::npos, "Connected must be true");
-        TEST_ASSERT(content.find("\"device_name\": \"WH-1000XM3\"") != std::string::npos, "Device name must match");
+        TEST_ASSERT(content.find("\"device_name\": \"ULT WEAR\"") != std::string::npos, "Device name must match");
+        TEST_ASSERT(content.find("\"ult_mode\": 0") != std::string::npos, "Must contain ULT mode");
         TEST_ASSERT(content.find("\"ambient_sound_level\"") != std::string::npos, "Must contain ambient_sound_level");
         TEST_ASSERT(content.find("\"ambient_level\"") != std::string::npos, "Must contain ambient_level");
         TEST_ASSERT(content.find("\"battery_charging\"") != std::string::npos, "Must contain battery_charging");
@@ -672,6 +668,11 @@ void testIpcServer() {
     TEST_ASSERT(server.handleCommandLine("eq custom 1 2 3 4 5 15").rfind("ERR clear bass out of range", 0) == 0, "out of range clear bass rejected");
     TEST_ASSERT_EQ(server.handleCommandLine("dsee off"), "OK\n", "dsee off valid");
     TEST_ASSERT_EQ(server.handleCommandLine("dsee on"), "OK\n", "dsee on valid");
+    TEST_ASSERT_EQ(server.handleCommandLine("voice-focus on"), "OK\n", "voice focus on valid");
+    TEST_ASSERT_EQ(server.handleCommandLine("ult off"), "OK\n", "ULT off valid");
+    TEST_ASSERT_EQ(server.handleCommandLine("ult 1"), "OK\n", "ULT 1 valid");
+    TEST_ASSERT_EQ(server.handleCommandLine("ult ult2"), "OK\n", "ULT 2 alias valid");
+    TEST_ASSERT(server.handleCommandLine("ult 3").rfind("ERR expected off|1|2", 0) == 0, "invalid ULT mode rejected");
     // XM5-only verbs must not silently look like they worked
     TEST_ASSERT(server.handleCommandLine("speak-to-chat on").rfind("ERR unknown command", 0) == 0, "speak-to-chat rejected");
     TEST_ASSERT(server.handleCommandLine("multipoint on").rfind("ERR unknown command", 0) == 0, "multipoint rejected");
@@ -752,7 +753,7 @@ void testIpcServer() {
         IpcCallbacks cbs;
         protocol::HeadphoneState testState;
         testState.connected = true;
-        testState.device_name = "WH-1000XM3";
+        testState.device_name = "ULT WEAR";
         testState.noise_mode = "anc";
         testState.battery_level = 90;
         cbs.getStatusJson = [&testState]() {
@@ -778,7 +779,7 @@ void testIpcServer() {
         std::string statusResp(respBuf, static_cast<size_t>(n));
         TEST_ASSERT(statusResp.back() == '\n', "Status response must terminate in newline");
         TEST_ASSERT_EQ(statusResp.find('\n'), statusResp.size() - 1, "Status response must have no embedded newlines before the final newline");
-        TEST_ASSERT(statusResp.find("\"device_name\":\"WH-1000XM3\"") != std::string::npos, "Status response contains compact device_name");
+        TEST_ASSERT(statusResp.find("\"device_name\":\"ULT WEAR\"") != std::string::npos, "Status response contains compact device_name");
         TEST_ASSERT(statusResp.find("\"noise_mode\":\"anc\"") != std::string::npos, "Status response contains compact noise_mode");
 
         ::close(clientFd2);

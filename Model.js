@@ -1,5 +1,5 @@
 // plugin/Model.js
-// Pure ECMAScript model library for Sony WH-1000XM3 headphone management.
+// Pure ECMAScript model library for Sony ULT WEAR headphone management.
 // Zero QML dependencies; runnable in QML, Deno, and Node.js runtimes.
 
 var SUPPORTED_SCHEMA = 1;
@@ -9,6 +9,10 @@ var NOISE_ANC = "anc";
 var NOISE_AMBIENT = "ambient";
 var NOISE_OFF = "off";
 var NOISE_UNKNOWN = "unknown";
+
+var ULT_OFF = 0;
+var ULT_1 = 1;
+var ULT_2 = 2;
 
 var EQ_OFF = "off";
 var EQ_BRIGHT = "bright";
@@ -42,6 +46,8 @@ function defaultStatus() {
     batteryCharging: false,
     noiseMode: NOISE_UNKNOWN,
     ambientSoundLevel: 0,
+    voicePassthrough: false,
+    ultMode: ULT_OFF,
     eqPreset: EQ_OFF,
     eqCustomBands: [0, 0, 0, 0, 0],
     clearBass: 0,
@@ -127,6 +133,8 @@ function parseStatus(raw) {
 
   var rawAmbient = parsed.ambient_sound_level !== undefined ? parsed.ambient_sound_level : parsed.ambient_level;
   res.ambientSoundLevel = clamp(rawAmbient, 0, 20, 0);
+  res.voicePassthrough = parsed.voice_passthrough === true;
+  res.ultMode = clamp(parsed.ult_mode, ULT_OFF, ULT_2, ULT_OFF);
 
   var validPresets = [EQ_OFF, EQ_BRIGHT, EQ_EXCITED, EQ_MELLOW, EQ_RELAXED, EQ_VOCAL, EQ_TREBLE, EQ_BASS, EQ_SPEECH, EQ_CUSTOM];
   var ep = String(parsed.eq_preset || "").toLowerCase();
@@ -187,6 +195,12 @@ function eqPresetButtonLabel(preset) {
     case EQ_BASS: return "Bass";
     default: return eqPresetName(preset);
   }
+}
+
+function ultModeName(mode) {
+  if (mode === ULT_1) return "ULT 1";
+  if (mode === ULT_2) return "ULT 2";
+  return "Off";
 }
 
 function formatBattery(level) {

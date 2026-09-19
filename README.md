@@ -1,20 +1,12 @@
 # omarchy-sony
 
-> **Fork for the WH-1000XM3.** This is a fork of
-> [andROYdified/omarchy-sony](https://github.com/andROYdified/omarchy-sony),
-> which targets the WH-1000XM5 and Sony's MDR **v2** protocol. The XM3 speaks
-> MDR **v1**: different service UUID, different RFCOMM channel, different
-> opcodes, and a mandatory handshake. A v2 client connects fine to an XM3 and
-> then does nothing at all, because the headset ACKs unknown commands and
-> silently ignores them.
->
-> Every byte here was captured from a real WH-1000XM3 on firmware 4.5.2 and is
-> documented in [`docs/xm3-protocol.md`](docs/xm3-protocol.md). Upstream is MIT
-> licensed and the original copyright is preserved in [LICENSE](LICENSE).
+> **Fork for Sony ULT WEAR (WH-ULT900N).** It uses Sony's MDR **v2** RFCOMM
+> service and model-specific commands verified against a real ULT WEAR headset.
+> The protocol details are documented in
+> [`docs/ult-wear-protocol.md`](docs/ult-wear-protocol.md).
 
-A modern, lightweight Omarchy bar-widget plugin and headless C++20 background daemon to manage **Sony WH-1000XM3** (and compatible Sony MDR v1) headphones on Linux.
-
-Provides real-time battery monitoring, Noise Cancellation (ANC / Ambient / Off) mode switching, granular ambient sound level controls, Equalizer presets, and smart feature toggles directly from the Omarchy desktop shell or command line.
+A lightweight Omarchy bar widget and C++20 background daemon for controlling
+**Sony ULT WEAR** headphones on Linux.
 
 ---
 
@@ -22,10 +14,10 @@ Provides real-time battery monitoring, Noise Cancellation (ANC / Ambient / Off) 
 
 - 🔋 **Live Battery & Codec Monitoring:** Real-time battery percentage, charging state, and active Bluetooth audio codec (e.g. LDAC, AAC, SBC).
 - 🎧 **Noise Control Modes:** Seamless hardware switching between **ANC (Noise Canceling)**, **Ambient Sound**, and **Off** (passive).
-- 🔊 **Ambient Sound Level Slider:** Granular adjustment of ambient passthrough (levels 0–20) with Focus on Voice support.
-- 🎛️ **Equalizer Profiles:** Switch presets (*Off, Bright, Excited, Mellow, Relaxed, Vocal, Treble Boost, Bass Boost, Speech, Custom*) and configure 5-band custom EQ + Clear Bass.
-- ⚙️ **Smart Features:** DSEE HX upscaling toggle.
-- 🚫 **Not on the XM3:** Speak-to-Chat, Multipoint and wearing detection are XM4/XM5 features. The headset does not answer those commands, so the plugin no longer exposes them.
+- 🗣️ **Focus on Voice:** Toggle voice emphasis while Ambient Sound is active.
+- 🔊 **ULT Power Sound:** Switch between Off, ULT 1, and ULT 2 bass modes.
+- ⚙️ **DSEE:** Toggle compressed-audio upscaling.
+- 🎚️ **Model-correct controls:** ULT WEAR has binary ANC/Ambient modes, so the widget does not show the ineffective 0–20 ambient slider used by XM5.
 - ⌨️ **Keyboard Navigation:** Full vim-style navigation (`h`/`j`/`k`/`l`, `Enter`, `Esc`) inside the panel dropdown.
 - 💻 **Standalone CLI (`sony-ctl`):** Full terminal and scripting interface for all headphone controls.
 - ⚡ **Zero Polling & Lightweight:** Native BlueZ RFCOMM transport with reactive file-view event updates.
@@ -58,10 +50,10 @@ Provides real-time battery monitoring, Noise Cancellation (ANC / Ambient / Off) 
 │   (/run/user/$UID/sony-headphones.sock)                │
 │                 │                                      │
 │                 ▼                                      │
-│   Bluetooth RFCOMM Stack (MDR v1 Protocol)             │
+│   Bluetooth RFCOMM Stack (MDR v2 Protocol)             │
 │                 │ (channel resolved over SDP)          │
 │                 ▼                                      │
-│       Sony WH-1000XM3 Headset                          │
+│       Sony ULT WEAR (WH-ULT900N)                       │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -154,14 +146,13 @@ sony-ctl noise anc          # Turn on Active Noise Cancellation
 sony-ctl noise ambient      # Switch to Ambient Sound mode
 sony-ctl noise off          # Turn off noise processing
 
-# Adjust Ambient Sound Level (0 - 20)
-sony-ctl ambient-level 12
+# Focus on Voice (switches to Ambient Sound)
+sony-ctl voice-focus on
 
-# Equalizer Presets
-sony-ctl eq bright
-sony-ctl eq vocal
-sony-ctl eq bass
-sony-ctl eq custom 0 2 4 2 0 5  # 5 bands (-10..10) + Clear Bass (-10..10)
+# ULT Power Sound
+sony-ctl ult off
+sony-ctl ult 1
+sony-ctl ult 2
 
 # Toggle Smart Features
 sony-ctl dsee on
@@ -203,12 +194,10 @@ deno run --allow-read tests/model.test.js
 
 ## Documentation
 
-The **WH-1000XM3 MDR v1 wire protocol** — service UUID, RFCOMM channel, handshake,
-every verified opcode and the commands the XM3 does *not* answer — is documented in
-[`docs/xm3-protocol.md`](docs/xm3-protocol.md).
-
-[`docs/protocol-guide.md`](docs/protocol-guide.md) is upstream's survey of third-party
-tooling for the WH-1000XM5, kept for reference.
+The verified **ULT WEAR MDR v2 wire protocol** — UUID, RFCOMM channel, framing,
+queries and controls — is documented in
+[`docs/ult-wear-protocol.md`](docs/ult-wear-protocol.md). The older XM3 and XM5
+notes remain under `docs/` for historical reference.
 
 ---
 
@@ -222,12 +211,14 @@ This project builds upon and draws inspiration from these open-source projects:
    - Reverse-engineered protocol definitions and implementation reference for Sony MDR Bluetooth RFCOMM communication.
 3. **[andROYdified/omarchy-sony](https://github.com/andROYdified/omarchy-sony)** by Roy Kevin De Jesus:
    - The upstream project this fork is based on (Omarchy plugin, daemon, CLI and test suite), MIT licensed.
+4. **[Leonard013/sony-ult-ctl](https://github.com/Leonard013/sony-ult-ctl)**:
+   - Independently captured ULT WEAR commands used to cross-check the live hardware responses.
 
 ---
 
 ## Disclaimer
 
-This is an unofficial, independent community project developed for Linux desktop integration. It is not affiliated with, authorized, maintained, sponsored, or endorsed by Sony Corporation or any of its subsidiaries. "Sony", "WH-1000XM3", and related marks are registered trademarks of Sony Corporation.
+This is an unofficial, independent community project developed for Linux desktop integration. It is not affiliated with, authorized, maintained, sponsored, or endorsed by Sony Corporation or any of its subsidiaries. "Sony", "ULT WEAR", "WH-ULT900N", and related marks are trademarks of Sony Corporation.
 
 ---
 

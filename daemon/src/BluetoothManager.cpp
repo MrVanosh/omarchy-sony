@@ -274,7 +274,9 @@ public:
             });
             if (nameLower.find("wh-1000xm3") != std::string::npos ||
                 nameLower.find("wh-1000xm2") != std::string::npos ||
-                nameLower.find("wh-1000xm4") != std::string::npos) {
+                nameLower.find("wh-1000xm4") != std::string::npos ||
+                nameLower.find("ult wear") != std::string::npos ||
+                nameLower.find("wh-ult900n") != std::string::npos) {
                 matchesName = true;
             }
 
@@ -525,11 +527,11 @@ std::optional<BluetoothDeviceInfo> MockDeviceDiscovery::findSonyHeadphones(const
     if (devices.empty()) {
         BluetoothDeviceInfo dev;
         dev.macAddress = "AA:BB:CC:DD:EE:FF";
-        dev.name = "WH-1000XM3";
-        dev.alias = "WH-1000XM3";
+        dev.name = "ULT WEAR";
+        dev.alias = "ULT WEAR";
         dev.paired = true;
         dev.connected = true;
-        dev.uuids.push_back(MDR_UUID_V1_LOWER);
+        dev.uuids.push_back(MDR_UUID_V2_LOWER);
         return dev;
     }
 
@@ -651,16 +653,15 @@ void BluetoothManager::attemptDiscovery() {
 void BluetoothManager::attemptSdp() {
     setState(ConnectionState::RESOLVING_SDP);
 
-    // The MDR RFCOMM channel is model- and firmware-specific (a WH-1000XM3 on
-    // firmware 4.5.2 publishes 15, an XM5 publishes 9), so resolve it over SDP
-    // rather than hardcoding it. v1 UUID first: that is the one an XM3 carries.
+    // The MDR RFCOMM channel is model- and firmware-specific, so resolve it over
+    // SDP rather than hardcoding it. ULT WEAR publishes the v2 service.
     currentChannel_ = config_.defaultChannel;
     if (sdpResolver_) {
         int ch = sdpResolver_->resolveRfcommChannel(
-            currentDevice_.macAddress, MDR_UUID_V1_LOWER, config_.sdpTimeoutMs);
+            currentDevice_.macAddress, MDR_UUID_V2_LOWER, config_.sdpTimeoutMs);
         if (ch <= 0 && !config_.mockMode) {
             ch = sdpResolver_->resolveRfcommChannel(
-                currentDevice_.macAddress, MDR_UUID_V2_LOWER, config_.sdpTimeoutMs);
+                currentDevice_.macAddress, MDR_UUID_V1_LOWER, config_.sdpTimeoutMs);
         }
         if (ch > 0) {
             currentChannel_ = static_cast<uint8_t>(ch);

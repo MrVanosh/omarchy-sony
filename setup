@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # setup — Packaging, Build & Installation Script for omarchy-sony
-# Project: omarchy-sony (Sony WH-1000XM3 Plugin & Headless Bluetooth Daemon)
+# Project: omarchy-sony (Sony ULT WEAR Plugin & Headless Bluetooth Daemon)
 # ==============================================================================
 set -euo pipefail
 
@@ -36,7 +36,7 @@ print_help() {
 Usage: setup [OPTIONS]
 
 Set up omarchy-sony: verify/install build dependencies, compile binaries,
-install binaries to ~/.local/bin, install and enable the systemd user service,
+install binaries to ~/.local/bin, install and start the systemd user service,
 and deploy the Omarchy bar-widget plugin.
 
 Options:
@@ -50,7 +50,7 @@ Steps performed:
      cmake -B build -G Ninja && cmake --build build
   3. Install sony-headphones-daemon and sony-ctl into ~/.local/bin (mode 0755).
   4. Copy daemon/sony-headphones.service to ~/.config/systemd/user/,
-     reload systemd daemon, and enable the service unit.
+     reload systemd daemon, then enable and start the service unit.
   5. Install the plugin into ~/.config/omarchy/plugins/io.github.felixdacraft.omasony
      (the only user-plugin directory Omarchy scans), validate it via
      omarchy-plugin-validate if present, and enable it.
@@ -187,10 +187,10 @@ install_systemd_service() {
   mkdir -p "$service_dir"
   install -m 0644 "$service_src" "$service_dest"
 
-  info "Reloading systemd user daemon and enabling sony-headphones.service..."
+  info "Reloading systemd user daemon and enabling/starting sony-headphones.service..."
   systemctl --user daemon-reload 2>/dev/null || true
-  systemctl --user enable sony-headphones.service 2>/dev/null || true
-  success "Systemd user service installed and enabled."
+  systemctl --user enable --now sony-headphones.service 2>/dev/null || true
+  success "Systemd user service installed, enabled, and started."
 }
 
 deploy_plugin() {
@@ -232,7 +232,7 @@ deploy_plugin() {
 
   if command -v omarchy >/dev/null 2>&1; then
     info "Enabling plugin io.github.felixdacraft.omasony in Omarchy..."
-    omarchy plugin enable io.github.felixdacraft.omasony 2>/dev/null || true
+    omarchy plugin enable io.github.felixdacraft.omasony
   fi
 }
 

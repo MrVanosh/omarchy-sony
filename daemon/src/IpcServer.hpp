@@ -29,6 +29,8 @@ struct IpcCallbacks {
     std::function<std::string()> getStatusJson;
     std::function<bool(protocol::NoiseMode mode, uint8_t ambientLevel, std::string& errorMsg)> setNoiseMode;
     std::function<bool(uint8_t level, std::string& errorMsg)> setAmbientLevel;
+    std::function<bool(bool enabled, std::string& errorMsg)> setVoiceFocus;
+    std::function<bool(protocol::UltMode mode, std::string& errorMsg)> setUltMode;
     std::function<bool(protocol::EqPreset preset, std::string& errorMsg)> setEqPreset;
     std::function<bool(const std::array<int, 5>& bands, int clearBass, std::string& errorMsg)> setCustomEq;
     std::function<bool(bool enabled, std::string& errorMsg)> setDsee;

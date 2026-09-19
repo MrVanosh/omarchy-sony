@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "io.github.felixdacraft.omasony",
-  "name": "Sony WH-1000XM3",
-  "version": "0.2.0",
+  "name": "Sony ULT WEAR",
+  "version": "0.3.0",
   "author": "FelixDaCraft",
   "license": "MIT",
-  "description": "Sony WH-1000XM3 Headphone Manager",
+  "description": "Sony ULT WEAR Headphone Manager",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,8 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Sony WH-1000XM3",
-    "description": "Sony WH-1000XM3 Headphone Manager",
+    "displayName": "Sony ULT WEAR",
+    "description": "Sony ULT WEAR Headphone Manager",
     "category": "Audio",
     "allowMultiple": false,
     "defaultSection": "right"

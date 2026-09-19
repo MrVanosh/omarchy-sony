@@ -71,7 +71,7 @@ public:
     // -----------------------------------------------------------------------
     // State Mutators
     // -----------------------------------------------------------------------
-    void setConnected(bool connected, const std::string& deviceName = "WH-1000XM3");
+    void setConnected(bool connected, const std::string& deviceName = "ULT WEAR");
     void setDeviceName(const std::string& name);
     void setBatteryLevel(int level);
     void setCharging(bool charging);
@@ -84,6 +84,9 @@ public:
     bool updateAmbientLevel(int level) { return setAmbientLevel(level); }
 
     bool setVoicePassthrough(bool passthrough);
+
+    bool setUltMode(int mode);
+    bool updateUltMode(int mode) { return setUltMode(mode); }
 
     bool setEqPreset(const std::string& preset);
     bool updateEqPreset(const std::string& preset) { return setEqPreset(preset); }

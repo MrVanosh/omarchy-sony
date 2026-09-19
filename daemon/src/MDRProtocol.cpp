@@ -26,6 +26,7 @@ std::string HeadphoneState::toJson() const {
        << "\"ambient_level\":" << ambient_sound_level << ","
        << "\"ambient_sound_level\":" << ambient_sound_level << ","
        << "\"voice_passthrough\":" << (voice_passthrough ? "true" : "false") << ","
+       << "\"ult_mode\":" << ult_mode << ","
        << "\"eq_preset\":\"" << eq_preset << "\","
        << "\"eq_bands\":["
        << eq_custom_bands[0] << "," << eq_custom_bands[1] << "," << eq_custom_bands[2] << ","
@@ -193,7 +194,7 @@ void StreamFramer::reset() {
 }
 
 // ---------------------------------------------------------------------------
-// Command Serializers (Host -> XM3)
+// Command Serializers (Host -> ULT WEAR / Sony MDR v2)
 // ---------------------------------------------------------------------------
 
 std::vector<uint8_t> serializeACK(uint8_t rx_seq) {
@@ -201,32 +202,19 @@ std::vector<uint8_t> serializeACK(uint8_t rx_seq) {
 }
 
 std::vector<uint8_t> serializeNoiseMode(NoiseMode mode, uint8_t ambientLevel, bool voiceFocus, uint8_t seq) {
-    // NCASM_SET_PARAM / MODE_NC_ASM (MDR v1, inquired type 0x02):
-    //   68 02 <effect> <ncAsmSettingType> <ncDualSingle> <asmSettingType> <asmId> <asmLevel>
-    const bool on = (mode != NoiseMode::OFF);
-    const uint8_t effect = on ? kNcAsmEffectCompletion : kNcAsmEffectOff;
-    const uint8_t dualSingle = (mode == NoiseMode::ANC) ? kNcDualSingleDual : kNcDualSingleOff;
-    const uint8_t asmId = (mode == NoiseMode::AMBIENT && voiceFocus) ? kAsmIdVoice : kAsmIdNormal;
-    const uint8_t level = (mode == NoiseMode::AMBIENT)
-        ? static_cast<uint8_t>(std::clamp(static_cast<int>(ambientLevel), 0, 20))
-        : 0x00;
-
+    // AmbientSoundControl2 (0x17). ULT WEAR accepts the common v2 level byte
+    // but ignores it: ANC and Ambient are binary modes on this model.
+    const uint8_t enabled = mode == NoiseMode::OFF ? 0x00 : 0x01;
+    const uint8_t ambient = mode == NoiseMode::AMBIENT ? 0x01 : 0x00;
+    const uint8_t voice = (mode == NoiseMode::AMBIENT && voiceFocus) ? 0x01 : 0x00;
     std::vector<uint8_t> payload = {
-        0x68,
-        0x02,
-        effect,
-        kNcAsmSettingDualSingleOff,
-        dualSingle,
-        kAsmSettingLevelAdjustment,
-        asmId,
-        level
+        0x68, 0x17, 0x01, enabled, ambient, 0x02, voice, 0x00
     };
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
 
 std::vector<uint8_t> serializeAmbientLevel(uint8_t level, bool voiceFocus, uint8_t seq) {
-    // The XM3 has no wind-noise-reduction mode: level 0 is simply the quietest
-    // ambient setting, so every level stays in AMBIENT.
+    (void)level;
     return serializeNoiseMode(NoiseMode::AMBIENT, level, voiceFocus, seq);
 }
 
@@ -261,13 +249,18 @@ std::vector<uint8_t> serializeCustomEq(const std::array<int, 5>& bands, int clea
 }
 
 std::vector<uint8_t> serializeDsee(bool enabled, uint8_t seq) {
-    // AUDIO_SET_PARAM / UPSCALING (DSEE HX):
-    //   e8 01 <settingType=ON_OFF> <value>
     std::vector<uint8_t> payload = {
-        0xE8,
-        0x01,
-        0x00,
-        static_cast<uint8_t>(enabled ? 0x01 : 0x00)
+        0xE8, 0x01, static_cast<uint8_t>(enabled ? 0x01 : 0x00)
+    };
+    return packFrame(PacketType::DATA_MDR, seq, payload);
+}
+
+std::vector<uint8_t> serializeUltMode(UltMode mode, uint8_t seq) {
+    // ULT bass is multiplexed into EQEBB inquired type 0x03. Preserve a flat
+    // six-band payload, as captured from the WH-ULT900N.
+    std::vector<uint8_t> payload = {
+        0x58, 0x03, 0x00, static_cast<uint8_t>(mode), 0x06,
+        0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A
     };
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
@@ -287,17 +280,17 @@ std::vector<uint8_t> serializeQueryDeviceName(uint8_t seq) {
 }
 
 std::vector<uint8_t> serializeQueryBattery(uint8_t seq) {
-    std::vector<uint8_t> payload = { 0x10, 0x00 }; // POWER_GET_STATUS, BATTERY
+    std::vector<uint8_t> payload = { 0x22, 0x00 }; // POWER_GET_STATUS, BATTERY (v2)
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
 
 std::vector<uint8_t> serializeQueryNoiseMode(uint8_t seq) {
-    std::vector<uint8_t> payload = { 0x66, 0x02 }; // NCASM_GET_PARAM, MODE_NC_ASM
+    std::vector<uint8_t> payload = { 0x66, 0x17 }; // AmbientSoundControl2
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
 
 std::vector<uint8_t> serializeQueryEq(uint8_t seq) {
-    std::vector<uint8_t> payload = { 0x56, kEqebbInquiredType }; // EQEBB_GET_PARAM
+    std::vector<uint8_t> payload = { 0x56, 0x00 }; // Legacy preset-EQ query
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
 
@@ -306,8 +299,13 @@ std::vector<uint8_t> serializeQueryDsee(uint8_t seq) {
     return packFrame(PacketType::DATA_MDR, seq, payload);
 }
 
+std::vector<uint8_t> serializeQueryUltMode(uint8_t seq) {
+    std::vector<uint8_t> payload = { 0x56, 0x03 };
+    return packFrame(PacketType::DATA_MDR, seq, payload);
+}
+
 // ---------------------------------------------------------------------------
-// Inbound State Deserializer (XM3 -> Host)
+// Inbound State Deserializer (ULT WEAR -> Host)
 // ---------------------------------------------------------------------------
 
 bool parseInboundPayload(std::span<const uint8_t> payload, HeadphoneState& state) {
@@ -323,31 +321,28 @@ bool parseInboundPayload(std::span<const uint8_t> payload, HeadphoneState& state
             updated = true;
         }
     }
-    // 2. Battery (POWER_RET_STATUS / POWER_NTFY_STATUS): 11|13 00 <level> <charging>
-    else if ((cmd == 0x11 || cmd == 0x13) && payload.size() >= 4 && payload[1] == 0x00) {
+    // 2. Battery (POWER_RET_STATUS / POWER_NTFY_STATUS): 23|25 00 <level> <charging>
+    else if ((cmd == 0x23 || cmd == 0x25) && payload.size() >= 4 && payload[1] == 0x00) {
         state.battery_level = payload[2];
         state.battery_charging = (payload[3] == 0x01);
         updated = true;
     }
-    // 3. Noise control (NCASM_RET_PARAM / NCASM_NTFY_PARAM):
-    //    67|69 02 <effect> <ncAsmSettingType> <ncDualSingle> <asmSettingType> <asmId> <asmLevel>
-    else if ((cmd == 0x67 || cmd == 0x69) && payload.size() >= 8 && payload[1] == 0x02) {
-        uint8_t effect     = payload[2];
-        uint8_t dualSingle = payload[4];
-        uint8_t asmId      = payload[6];
-        uint8_t level      = payload[7];
-
-        if (effect == kNcAsmEffectOff) {
+    // 3. AmbientSoundControl2: 67|69 17 01 <enabled> <ambient> <reserved> <voice>
+    else if ((cmd == 0x67 || cmd == 0x69) && payload.size() >= 7 && payload[1] == 0x17) {
+        if (payload[3] == 0x00) {
             state.noise_mode = "off";
-        } else if (dualSingle == kNcDualSingleOff) {
+        } else if (payload[4] == 0x01) {
             state.noise_mode = "ambient";
         } else {
             state.noise_mode = "anc";
         }
-        // The headset keeps reporting the last ambient level in every mode, so
-        // it is worth remembering even while ANC or Off is active.
-        state.ambient_sound_level = std::clamp(static_cast<int>(level), 0, 20);
-        state.voice_passthrough = (asmId == kAsmIdVoice);
+        state.ambient_sound_level = 0;
+        state.voice_passthrough = payload[6] == 0x01;
+        updated = true;
+    }
+    // 4. ULT mode: 57|59 03 <eqPreset> <ultMode> 06 <six bands>
+    else if ((cmd == 0x57 || cmd == 0x59) && payload.size() >= 5 && payload[1] == 0x03) {
+        state.ult_mode = std::clamp(static_cast<int>(payload[3]), 0, 2);
         updated = true;
     }
     // 4. Equalizer (EQEBB_RET_PARAM / EQEBB_NTFY_PARAM):
@@ -362,9 +357,9 @@ bool parseInboundPayload(std::span<const uint8_t> payload, HeadphoneState& state
         }
         updated = true;
     }
-    // 5. DSEE HX (AUDIO_RET_PARAM / AUDIO_NTFY_PARAM): e7|e9 01 <settingType> <value>
-    else if ((cmd == 0xE7 || cmd == 0xE9) && payload.size() >= 4 && payload[1] == 0x01) {
-        state.dsee_extreme = (payload[3] == 0x01);
+    // 6. DSEE (AUDIO_RET_PARAM / AUDIO_NTFY_PARAM): e7|e9 01 <value>
+    else if ((cmd == 0xE7 || cmd == 0xE9) && payload.size() >= 3 && payload[1] == 0x01) {
+        state.dsee_extreme = (payload[2] == 0x01);
         updated = true;
     }
     // Alternative single-byte dispatch (compact representations used by mocks)

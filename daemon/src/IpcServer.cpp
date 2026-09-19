@@ -513,6 +513,44 @@ std::string IpcServer::handleBuiltinCommand(const std::string& line) {
         return "OK\n";
     }
 
+    // ULT WEAR has no graduated ambient level; it exposes only Voice Focus.
+    if (verb == "voice-focus") {
+        if (tokens.size() < 2) {
+            return "ERR expected on|off\n";
+        }
+        std::string val = toLower(tokens[1]);
+        if (val != "on" && val != "off") {
+            return "ERR expected on|off\n";
+        }
+        if (callbacks_.setVoiceFocus) {
+            std::string err;
+            if (!callbacks_.setVoiceFocus(val == "on", err)) {
+                return "ERR " + (err.empty() ? "failed to set voice focus" : err) + "\n";
+            }
+        }
+        return "OK\n";
+    }
+
+    if (verb == "ult") {
+        if (tokens.size() < 2) {
+            return "ERR expected off|1|2\n";
+        }
+        std::string val = toLower(tokens[1]);
+        protocol::UltMode mode;
+        if (val == "off" || val == "0") mode = protocol::UltMode::OFF;
+        else if (val == "1" || val == "ult1") mode = protocol::UltMode::ULT1;
+        else if (val == "2" || val == "ult2") mode = protocol::UltMode::ULT2;
+        else return "ERR expected off|1|2\n";
+
+        if (callbacks_.setUltMode) {
+            std::string err;
+            if (!callbacks_.setUltMode(mode, err)) {
+                return "ERR " + (err.empty() ? "failed to set ULT mode" : err) + "\n";
+            }
+        }
+        return "OK\n";
+    }
+
     // 4. eq <preset> OR eq custom <b1> <b2> <b3> <b4> <b5> <cb>
     if (verb == "eq") {
         if (tokens.size() < 2) {

@@ -1,5 +1,5 @@
 // plugin/Service.qml
-// Reactive singleton / manager service for Sony WH-1000XM3 headphones.
+// Reactive singleton / manager service for Sony ULT WEAR headphones.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -38,18 +38,24 @@ Item {
 
   // Real internal states reported by daemon
   property string _realNoiseMode: Model.NOISE_UNKNOWN
+  property bool _realVoicePassthrough: false
+  property int _realUltMode: Model.ULT_OFF
   property int _realAmbientSoundLevel: 0
   property string _realEqPreset: Model.EQ_OFF
   property bool _realDseeExtreme: false
 
   // Optimistic desired states
   property string _desiredNoiseMode: ""
+  property var _desiredVoicePassthrough: null
+  property int _desiredUltMode: -1
   property int _desiredAmbientLevel: -1
   property string _desiredEqPreset: ""
   property var _desiredDsee: null
 
   // Exposed effective properties (optimistic value if pending, otherwise real value)
   readonly property string noiseMode: _desiredNoiseMode !== "" ? _desiredNoiseMode : _realNoiseMode
+  readonly property bool voicePassthrough: _desiredVoicePassthrough !== null ? _desiredVoicePassthrough : _realVoicePassthrough
+  readonly property int ultMode: _desiredUltMode !== -1 ? _desiredUltMode : _realUltMode
   readonly property int ambientSoundLevel: _desiredAmbientLevel !== -1 ? _desiredAmbientLevel : _realAmbientSoundLevel
   readonly property string eqPreset: _desiredEqPreset !== "" ? _desiredEqPreset : _realEqPreset
   readonly property bool dseeExtreme: _desiredDsee !== null ? _desiredDsee : _realDseeExtreme
@@ -64,6 +70,8 @@ Item {
 
   function clearOptimisticOverrides() {
     _desiredNoiseMode = ""
+    _desiredVoicePassthrough = null
+    _desiredUltMode = -1
     _desiredAmbientLevel = -1
     _desiredEqPreset = ""
     _desiredDsee = null
@@ -136,17 +144,22 @@ Item {
     clearBass = parsed.clearBass !== undefined ? parsed.clearBass : 0
 
     _realNoiseMode = parsed.noiseMode || Model.NOISE_UNKNOWN
+    _realVoicePassthrough = parsed.voicePassthrough === true
+    _realUltMode = parsed.ultMode !== undefined ? parsed.ultMode : Model.ULT_OFF
     _realAmbientSoundLevel = parsed.ambientSoundLevel !== undefined ? parsed.ambientSoundLevel : 0
     _realEqPreset = parsed.eqPreset || Model.EQ_OFF
     _realDseeExtreme = parsed.dseeExtreme === true
 
     // Reconcile optimistic values with settled daemon updates
     if (_desiredNoiseMode !== "" && _realNoiseMode === _desiredNoiseMode) _desiredNoiseMode = ""
+    if (_desiredVoicePassthrough !== null && _realVoicePassthrough === _desiredVoicePassthrough) _desiredVoicePassthrough = null
+    if (_desiredUltMode !== -1 && _realUltMode === _desiredUltMode) _desiredUltMode = -1
     if (_desiredAmbientLevel !== -1 && _realAmbientSoundLevel === _desiredAmbientLevel) _desiredAmbientLevel = -1
     if (_desiredEqPreset !== "" && _realEqPreset === _desiredEqPreset) _desiredEqPreset = ""
     if (_desiredDsee !== null && _realDseeExtreme === _desiredDsee) _desiredDsee = null
 
-    if (_desiredNoiseMode === "" && _desiredAmbientLevel === -1 && _desiredEqPreset === "" &&
+    if (_desiredNoiseMode === "" && _desiredVoicePassthrough === null && _desiredUltMode === -1 &&
+        _desiredAmbientLevel === -1 && _desiredEqPreset === "" &&
         _desiredDsee === null) {
       settleTimer.stop()
     }
@@ -158,6 +171,20 @@ Item {
     _desiredNoiseMode = mode
     settleTimer.restart()
     runCommand(["noise", mode])
+  }
+
+  function setVoiceFocus(enabled) {
+    _desiredNoiseMode = Model.NOISE_AMBIENT
+    _desiredVoicePassthrough = enabled === true
+    settleTimer.restart()
+    runCommand(["voice-focus", enabled ? "on" : "off"])
+  }
+
+  function setUltMode(mode) {
+    var clamped = Model.clamp(mode, Model.ULT_OFF, Model.ULT_2, Model.ULT_OFF)
+    _desiredUltMode = clamped
+    settleTimer.restart()
+    runCommand(["ult", clamped === Model.ULT_OFF ? "off" : String(clamped)])
   }
 
   function setAmbientLevel(level) {

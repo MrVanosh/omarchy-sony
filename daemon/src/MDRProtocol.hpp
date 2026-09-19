@@ -36,21 +36,13 @@ enum class NoiseMode : uint8_t {
     AMBIENT     = 2
 };
 
-// MDR v1 NC/ASM field values (verified against WH-1000XM3 firmware 4.5.2).
-// The headset only applies a SET when ncAsmEffect is ADJUSTMENT_COMPLETION;
-// it reports back plain ON/OFF instead.
-inline constexpr uint8_t kNcAsmEffectOff        = 0x00; // reported, and used to switch everything off
-inline constexpr uint8_t kNcAsmEffectOn         = 0x01; // reported only
-inline constexpr uint8_t kNcAsmEffectCompletion = 0x11; // required on every "on" SET
-inline constexpr uint8_t kNcAsmSettingDualSingleOff = 0x02;
-inline constexpr uint8_t kNcDualSingleOff  = 0x00; // ambient sound
-inline constexpr uint8_t kNcDualSingleDual = 0x02; // noise cancelling
-inline constexpr uint8_t kAsmSettingLevelAdjustment = 0x01;
-inline constexpr uint8_t kAsmIdNormal = 0x00;
-inline constexpr uint8_t kAsmIdVoice  = 0x01;
+enum class UltMode : uint8_t {
+    OFF = 0,
+    ULT1 = 1,
+    ULT2 = 2
+};
 
-// EQEBB inquired type. The XM3 answers on 0x01; 0x00 (used by XM4/XM5) is ignored.
-inline constexpr uint8_t kEqebbInquiredType = 0x01;
+inline constexpr uint8_t kEqebbInquiredType = 0x00;
 
 enum class EqPreset : uint8_t {
     OFF         = 0x00,
@@ -78,16 +70,17 @@ struct UnpackedFrame {
 struct HeadphoneState {
     int schema_version = 1;
     bool connected = false;
-    std::string device_name = "WH-1000XM3";
+    std::string device_name = "ULT WEAR";
     int battery_level = -1;             // 0-100, or -1 if unknown
     bool battery_charging = false;
     std::string noise_mode = "anc";     // "anc", "ambient", "off"
-    int ambient_sound_level = 0;        // 0-20 (the XM3 has no wind-noise mode)
+    int ambient_sound_level = 0;        // Kept for status compatibility; ULT WEAR is binary
     bool voice_passthrough = false;
+    int ult_mode = 0;                   // 0 = off, 1 = ULT 1, 2 = ULT 2
     std::string eq_preset = "off";
     std::array<int, 5> eq_custom_bands = {0, 0, 0, 0, 0}; // [-10, 10]
     int clear_bass = 0;                 // [-10, 10]
-    bool dsee_extreme = true;           // DSEE HX on the XM3
+    bool dsee_extreme = true;
     std::string codec = "LDAC";
     int64_t last_updated = 0;
 
@@ -121,7 +114,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Command Serializers (Host -> XM3)
+// Command Serializers (Host -> ULT WEAR / Sony MDR v2)
 // ---------------------------------------------------------------------------
 std::vector<uint8_t> serializeACK(uint8_t rx_seq);
 std::vector<uint8_t> serializeNoiseMode(NoiseMode mode, uint8_t ambientLevel = 0, bool voiceFocus = false, uint8_t seq = 0);
@@ -129,9 +122,10 @@ std::vector<uint8_t> serializeAmbientLevel(uint8_t level, bool voiceFocus = fals
 std::vector<uint8_t> serializeEqPreset(EqPreset preset, uint8_t seq = 0);
 std::vector<uint8_t> serializeCustomEq(const std::array<int, 5>& bands, int clearBass, uint8_t seq = 0);
 std::vector<uint8_t> serializeDsee(bool enabled, uint8_t seq = 0);
+std::vector<uint8_t> serializeUltMode(UltMode mode, uint8_t seq = 0);
 
 // ---------------------------------------------------------------------------
-// Query Serializers (Host -> XM3 initialization)
+// Query Serializers (Host -> ULT WEAR initialization)
 // ---------------------------------------------------------------------------
 // CONNECT_GET_PROTOCOL_INFO. The XM3 stays mute on every other command until
 // this handshake has been sent, so it must open each RFCOMM session.
@@ -141,9 +135,10 @@ std::vector<uint8_t> serializeQueryBattery(uint8_t seq = 0);
 std::vector<uint8_t> serializeQueryNoiseMode(uint8_t seq = 0);
 std::vector<uint8_t> serializeQueryEq(uint8_t seq = 0);
 std::vector<uint8_t> serializeQueryDsee(uint8_t seq = 0);
+std::vector<uint8_t> serializeQueryUltMode(uint8_t seq = 0);
 
 // ---------------------------------------------------------------------------
-// Inbound State Deserializer (XM3 -> Host)
+// Inbound State Deserializer (ULT WEAR -> Host)
 // ---------------------------------------------------------------------------
 // Parses an unpacked payload into HeadphoneState. Returns true if state was updated.
 bool parseInboundPayload(std::span<const uint8_t> payload, HeadphoneState& state);

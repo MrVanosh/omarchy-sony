@@ -1,5 +1,5 @@
 [Unit]
-Description=Sony WH-1000XM3 Headless Bluetooth Daemon
+Description=Sony ULT WEAR Headless Bluetooth Daemon
 PartOf=graphical-session.target
 After=bluetooth.target graphical-session.target
 

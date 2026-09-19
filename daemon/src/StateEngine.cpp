@@ -79,15 +79,16 @@ bool StateEngine::ensureStateDirectory(const std::filesystem::path& dirPath) {
 StateEngine::StateEngine(const std::filesystem::path& customStatePath)
     : stateFilePath_(resolveStateFilePath(customStatePath)),
       stateDir_(stateFilePath_.parent_path()) {
-    // Default initial standard WH-1000XM3 state
+    // Default initial ULT WEAR state
     state_.schema_version = 1;
     state_.connected = true;
-    state_.device_name = "WH-1000XM3";
+    state_.device_name = "ULT WEAR";
     state_.battery_level = 85;
     state_.battery_charging = false;
     state_.noise_mode = "anc";
     state_.ambient_sound_level = 0;
     state_.voice_passthrough = false;
+    state_.ult_mode = 0;
     state_.eq_preset = "off";
     state_.eq_custom_bands = {0, 0, 0, 0, 0};
     state_.clear_bass = 0;
@@ -240,6 +241,7 @@ std::string StateEngine::serializeStateLocked() const {
        << "  \"ambient_level\": " << state_.ambient_sound_level << ",\n"
        << "  \"ambient_sound_level\": " << state_.ambient_sound_level << ",\n"
        << "  \"voice_passthrough\": " << (state_.voice_passthrough ? "true" : "false") << ",\n"
+       << "  \"ult_mode\": " << state_.ult_mode << ",\n"
        << "  \"eq_preset\": \"" << state_.eq_preset << "\",\n"
        << "  \"eq_bands\": ["
        << state_.eq_custom_bands[0] << ", " << state_.eq_custom_bands[1] << ", "
@@ -432,6 +434,23 @@ bool StateEngine::setVoicePassthrough(bool passthrough) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         state_.voice_passthrough = passthrough;
+        state_.last_updated = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        payloadJson = serializeStateLocked();
+        notifyListenersLocked();
+    }
+    writeAtomic(payloadJson);
+    return true;
+}
+
+bool StateEngine::setUltMode(int mode) {
+    if (mode < 0 || mode > 2) {
+        return false;
+    }
+    std::string payloadJson;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        state_.ult_mode = mode;
         state_.last_updated = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         payloadJson = serializeStateLocked();

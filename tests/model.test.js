@@ -42,9 +42,10 @@ if (modelSource) {
     `; return {
       SUPPORTED_SCHEMA, LEVEL_UNKNOWN,
       NOISE_ANC, NOISE_AMBIENT, NOISE_OFF, NOISE_UNKNOWN,
+      ULT_OFF, ULT_1, ULT_2,
       EQ_OFF, EQ_BRIGHT, EQ_EXCITED, EQ_MELLOW, EQ_RELAXED, EQ_VOCAL, EQ_TREBLE, EQ_BASS, EQ_SPEECH, EQ_CUSTOM,
       defaultStatus, parseStatus,
-      noiseModeName, noiseModeIcon, eqPresetName, eqPresetButtonLabel,
+      noiseModeName, noiseModeIcon, eqPresetName, eqPresetButtonLabel, ultModeName,
       batteryIcon, formatBattery, levelFraction, elideError
     };`
   )();
@@ -364,6 +365,8 @@ console.log("\n[Suite 3: Full Connected Payload]");
   check("Battery charging", r.batteryCharging, false);
   check("Noise mode", r.noiseMode, "anc");
   check("Ambient level", r.ambientSoundLevel, 0);
+  check("Voice passthrough default", r.voicePassthrough, false);
+  check("ULT mode default", r.ultMode, Model.ULT_OFF);
   check("EQ preset", r.eqPreset, "bright");
   check("EQ custom bands", r.eqCustomBands, [1, 2, 0, -1, 3]);
   check("Clear bass", r.clearBass, 2);
@@ -431,6 +434,9 @@ console.log("\n[Suite 6: Display Formatters & Helpers]");
   check("eqPresetButtonLabel(treble)", Model.eqPresetButtonLabel("treble"), "Treble");
   check("eqPresetButtonLabel(bass)", Model.eqPresetButtonLabel("bass"), "Bass");
   check("eqPresetButtonLabel(vocal)", Model.eqPresetButtonLabel("vocal"), "Vocal");
+  check("ultModeName(off)", Model.ultModeName(Model.ULT_OFF), "Off");
+  check("ultModeName(1)", Model.ultModeName(Model.ULT_1), "ULT 1");
+  check("ultModeName(2)", Model.ultModeName(Model.ULT_2), "ULT 2");
 
   check("formatBattery(78)", Model.formatBattery(78), "78%");
   check("formatBattery(0)", Model.formatBattery(0), "0%");
